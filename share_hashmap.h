@@ -64,7 +64,6 @@ class ShareHashMap {
         typedef _HashFunc hasher;
         
     public:
-        // The first version, the key is always 4 byte
         ShareHashMap(const char * __name) {
             m_hash_params.name = __name;
             m_hash_params.entries = DEFAULT_TOTAL_ENTRIES;
