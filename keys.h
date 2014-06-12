@@ -12,20 +12,41 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  *
- * Copyright (C) Bruce.Li <jiangwlee@163.com>, 2014
+ * Copyright (C) Bruce <jiangwlee@163.com>, 2014
  */
 
+/*
+ * @file : keys.h
+ * @description : define different key types and hashers
+ *
+ */
 
-#ifndef _MAIN_H_
-#define _MAIN_H_
+#ifndef __KYES_H__
+#define __KEYS_H__
 
-#ifdef RTE_EXEC_ENV_BAREMETAL
-#define MAIN _main
-#else
-#define MAIN main
+#include <iostream>
+#include <sstream>
+
+#include <rte_jhash.h>
+
+using namespace std;
+
+// declarations
+struct struct_key;
+ostream& operator<< (ostream &os, const struct_key& key); 
+
+struct struct_key {
+    int src_ip;
+    int dst_ip; 
+
+    struct_key(int key) : src_ip(key), dst_ip(key << 2) {}
+};
+
+template <typename _Key>
+struct jhasher{
+    size_t operator() (const _Key& key) const {
+        return rte_jhash((const void *)&key, sizeof(key), 0);
+    }
+};
+
 #endif
-
-
-int MAIN(int argc, char **argv);
-
-#endif /* _MAIN_H_ */

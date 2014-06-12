@@ -12,20 +12,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  *
- * Copyright (C) Bruce.Li <jiangwlee@163.com>, 2014
+ * Copyright (C) Bruce <jiangwlee@163.com>, 2014
  */
 
+#include "keys.h"
 
-#ifndef _MAIN_H_
-#define _MAIN_H_
+ostream& operator<< (ostream &os, const struct_key& key) {
+    ostringstream str;
+    str << "src_ip is " << hex << key.src_ip << " dst_ip is " << key.dst_ip << endl;
+    os << str.str();
+    return os;
+}
 
-#ifdef RTE_EXEC_ENV_BAREMETAL
-#define MAIN _main
-#else
-#define MAIN main
-#endif
-
-
-int MAIN(int argc, char **argv);
-
-#endif /* _MAIN_H_ */
