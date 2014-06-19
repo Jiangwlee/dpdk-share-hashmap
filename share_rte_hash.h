@@ -150,6 +150,43 @@ class ShareRteHash {
         	return -ENOENT;
         }
 
+        template<typename _KeyValue>
+        void * find_or_insert_with_hash(const rte_hash *h, const _KeyValue *key_value, hash_sig_t sig)
+        {
+        	RETURN_IF_TRUE(((h == NULL) || (key_value == NULL)), NULL);
+        
+        	hash_sig_t *sig_bucket;
+        	uint8_t *key_bucket;
+        	uint32_t bucket_index, i;
+        
+        	/* Get the hash signature and bucket index */
+        	sig |= h->sig_msb;
+        	bucket_index = sig & h->bucket_bitmask;
+        	sig_bucket = get_sig_tbl_bucket(h, bucket_index);
+        	key_bucket = get_key_tbl_bucket(h, bucket_index);
+        
+        	/* Check if key is already present in the hash */
+        	for (i = 0; i < h->bucket_entries; i++) {
+        		if (sig == sig_bucket[i]) {
+                    _KeyValue * tmp = static_cast<_KeyValue*>(get_key_from_bucket(h, key_bucket, i));
+                    if (tmp && (key_value->k == tmp->k))
+        			    return static_cast<void *>(&(tmp->v));
+        		}
+        	}
+        
+        	/* Check if any free slot within the bucket to add the new key */
+        	int32_t pos = find_first(k_NULL_SIGNATURE, sig_bucket, h->bucket_entries);
+        
+        	if (pos < 0)
+        		return NULL;
+        
+        	/* Add the new key to the bucket */
+        	sig_bucket[pos] = sig;
+            _KeyValue * tmp = static_cast<_KeyValue *>(get_key_from_bucket(h, key_bucket, pos));
+        	rte_memcpy(static_cast<void *>(tmp), key_value, h->key_len);
+        	return static_cast<void *>(&(tmp->v));
+        }
+
     public:
         ~ShareRteHash() {}
 

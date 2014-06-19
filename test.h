@@ -117,7 +117,7 @@ void test_share_hashmap(void)
             return;
 	}
 
-    cout << "Please input your choice : a[dd], d[elete], f[ind], s[how], q[uit]" << endl;
+    cout << "Please input your choice : a[dd], d[elete], f[ind], m[odify], s[how], q[uit]" << endl;
 
     while (1) {
         int input = getchar();
@@ -137,7 +137,13 @@ void test_share_hashmap(void)
                 break;
             case 'f':
                 key = prompt_key();
-                shm.find(key);
+                if (shm.find(key) >= 0)
+                    cout << shm[key] << endl;
+                break;
+            case 'm':
+                key = prompt_key();
+                value = prompt_value();
+                shm[key] = value;
                 break;
             case 's':
                 shm.print();
@@ -149,7 +155,7 @@ void test_share_hashmap(void)
                 continue;
         }
 
-        cout << "Please input your choice : a[dd], d[elete], f[ind], s[how], q[uit]" << endl;
+        cout << "Please input your choice : a[dd], d[elete], f[ind], m[odify], s[how], q[uit]" << endl;
 
         if (quit)
             break;

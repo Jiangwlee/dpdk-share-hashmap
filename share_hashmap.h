@@ -107,6 +107,24 @@ class ShareHashMap {
                 return false;
         }
 
+        //
+        // <case 1> If the key has already in the hash table, return a reference to the value 
+        // <case 2> If the key is not in the hash table, insert an element with the key and then
+        //          return a reference to the value
+        // 
+        value_type & operator[] (const key_type& __key) {
+            key_value_pair_type key_value_pair;
+            key_value_pair.k = __key;
+            hash_sig_t signature = m_hash_func(__key);
+            void * value_ptr = ShareRteHash::instance().find_or_insert_with_hash(m_rte_hash, &key_value_pair, signature);
+
+            if (value_ptr == NULL)
+                throw;
+
+            return *static_cast<value_type*>(value_ptr);
+        }
+
+        // insert a <key, value> pair to hash table
         int32_t insert(const key_type& __key, const value_type& __value) {
             key_value_pair_type key_value_pair = {__key, __value};
             hash_sig_t signature = m_hash_func(__key);
@@ -121,6 +139,8 @@ class ShareHashMap {
             return position;
         }
 
+        // get the index of a key in hash table
+        // return a negative number if fail
         int32_t find(const key_type& __key) {
             key_value_pair_type key_value_pair;
             key_value_pair.k = __key;
