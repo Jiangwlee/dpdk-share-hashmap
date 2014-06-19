@@ -42,7 +42,7 @@ include $(RTE_SDK)/mk/rte.vars.mk
 APP = hashmap
 
 # all source are stored in SRCS-y
-SRCS-y := main.cpp keys.cpp
+SRCS-y := main.cpp keys.cpp share_rte_hash.cpp
 
 CFLAGS += -O3 -DDEBUG
 WERROR_FLAGS += -Wno-unused-result -Wno-unused-function

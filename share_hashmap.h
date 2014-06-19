@@ -32,11 +32,9 @@
 #include <stdio.h>
 #include <iostream>
 #include <sstream>
-#include "hash_func.h"
 
 #include <errno.h>
 #include <rte_errno.h>
-#include <rte_hash.h>
 /* Hash function used if none is specified */
 #ifdef RTE_MACHINE_CPUFLAG_SSE4_2
 #include <rte_hash_crc.h>
@@ -46,29 +44,37 @@
 #define DEFAULT_HASH_FUNC       rte_jhash
 #endif
 
+#include "hash_func.h"
+#include "share_rte_hash.h"
+
 using namespace std;
 
 // Forward declaration
-template <class _Key, class _HashFunc = sharehash::hash<_Key> >
+template <class _Key, class _Value, class _HashFunc = sharehash::hash<_Key> >
 class ShareHashMap;
 
-template <class _Key, class _HashFunc>
+template <class _Key, class _Value, class _HashFunc>
 class ShareHashMap {
     public:
-        static const int DEFAULT_BUCKET_ENTRIES = 16;
-        static const int DEFAULT_TOTAL_ENTRIES  = 16 << 3;
-        static const int DEFAULT_KEY_LENGTH     = 4;
+        static const int DEFAULT_BUCKET_ENTRIES = 128;
+        static const int DEFAULT_TOTAL_ENTRIES  = DEFAULT_BUCKET_ENTRIES * 16;
 
     public:
         typedef _Key key_type;
+        typedef _Value value_type;
         typedef _HashFunc hasher;
         
+        typedef struct KeyValuePair {
+            key_type   k;
+            value_type v;
+        } key_value_pair_type; 
+
     public:
         ShareHashMap(const char * __name) {
             m_hash_params.name = __name;
             m_hash_params.entries = DEFAULT_TOTAL_ENTRIES;
             m_hash_params.bucket_entries = DEFAULT_BUCKET_ENTRIES;
-            m_hash_params.key_len = sizeof(_Key);
+            m_hash_params.key_len = sizeof(key_value_pair_type);
             m_hash_params.hash_func = NULL;
             m_hash_params.hash_func_init_val = 0;
             m_hash_params.socket_id = 0; 
@@ -76,9 +82,14 @@ class ShareHashMap {
             m_rte_hash = NULL;
         }
 
+        ~ShareHashMap(void) {
+	        if (rte_eal_process_type() == RTE_PROC_PRIMARY)
+                ShareRteHash::instance().free_hash_table(m_rte_hash);
+        }
+
         // create a hashmap, used by primary process
         bool create(void) {
-            m_rte_hash = rte_hash_create(&m_hash_params); 
+            m_rte_hash = ShareRteHash::instance().create_hash_table(&m_hash_params); 
             
             if (m_rte_hash)
                 return true;
@@ -88,7 +99,7 @@ class ShareHashMap {
 
         // attach to an existing hashmap, used by secondary process
         bool attach(void) {
-            m_rte_hash = rte_hash_find_existing(m_hash_params.name); 
+            m_rte_hash = ShareRteHash::instance().attach_hash_table(m_hash_params.name); 
             
             if (m_rte_hash)
                 return true;
@@ -96,10 +107,10 @@ class ShareHashMap {
                 return false;
         }
 
-        int32_t insert(const key_type& __key) {
-            //hash_sig_t signature = m_hash_func((const void *)&__key, sizeof(__key), m_hash_func_init_val);  
+        int32_t insert(const key_type& __key, const value_type& __value) {
+            key_value_pair_type key_value_pair = {__key, __value};
             hash_sig_t signature = m_hash_func(__key);
-            int32_t position = rte_hash_add_key_with_hash(m_rte_hash, (const void *)&__key, signature);
+            int32_t position = ShareRteHash::instance().add_key_value_with_hash(m_rte_hash, &key_value_pair, signature);
         
 #ifdef DEBUG
             cout << " ... ... insert key : " << __key
@@ -111,9 +122,10 @@ class ShareHashMap {
         }
 
         int32_t find(const key_type& __key) {
-            //hash_sig_t signature = m_hash_func((const void *)&__key, sizeof(__key), m_hash_func_init_val);
+            key_value_pair_type key_value_pair;
+            key_value_pair.k = __key;
             hash_sig_t signature = m_hash_func(__key);
-            int32_t position = rte_hash_lookup_with_hash(m_rte_hash, (const void *)&__key, signature);
+            int32_t position = ShareRteHash::instance().lookup_with_hash(m_rte_hash, &key_value_pair, signature);
         
             if (position == EINVAL) {
                 cout << " ... ... Invalid parameters!" << endl;
@@ -131,9 +143,10 @@ class ShareHashMap {
         }
 
         int32_t erase(const key_type & __key) {
-            //hash_sig_t signature = m_hash_func((const void *)&__key, sizeof(__key), m_hash_func_init_val);
+            key_value_pair_type key_value_pair;
+            key_value_pair.k = __key;
             hash_sig_t signature = m_hash_func(__key);
-            int32_t position = rte_hash_del_key_with_hash(m_rte_hash, (const void *)&__key, signature);
+            int32_t position = ShareRteHash::instance().del_key_value_with_hash(m_rte_hash, &key_value_pair, signature);
         
 #ifdef DEBUG
             cout << " ... ... Erase key : " << __key
@@ -184,6 +197,15 @@ class ShareHashMap {
             __log << "key length    : " << m_rte_hash->key_len << endl;
             __log << "used entries  : " << used_entry_count() << endl;
             __log << "free entries  : " << free_entry_count() << endl;
+
+            // for debug
+            __log << endl;
+            __log << "---------- Debug Information -----------" << endl;
+            __log << " Address of rte_hash : " << hex << (void*)m_rte_hash << endl;
+            __log << " Address of sig_tbl  : " << hex << (void*)m_rte_hash->sig_tbl
+                  << " Bucket Size : " << dec << m_rte_hash->sig_tbl_bucket_size << endl;
+            __log << " Address of key_tbl  : " << hex << (void*)m_rte_hash->key_tbl
+                  << " Key Size : " << dec << m_rte_hash->key_tbl_key_size << endl << endl;
         }
         
         void print(void) {

@@ -24,11 +24,12 @@
 #ifndef __TEST_H__
 #define __TEST_H__
 
-template <typename _Key, typename _Hashfunc>
+#if 0
+template <typename _Key, typename _Value, typename _Hashfunc>
 void test_share_hashmap(void)
 {
     char name[] = "test01";
-    ShareHashMap<_Key, _Hashfunc> shm(name);
+    ShareHashMap<_Key, _Value, _Hashfunc> shm(name);
 
 	if (rte_eal_process_type() == RTE_PROC_PRIMARY){ 
         if (!shm.create())                           
@@ -80,13 +81,33 @@ void test_share_hashmap(void)
             break;
     }
 }
+#endif
 
+static int prompt_key(void) {
+    int key;
 
-template <typename _Key>
+    cout << " ... Please input the key [1 ~ 65536] : ";
+    cin  >> key;
+    cout << " ... You just input " << key << endl;
+
+    return key;
+}
+
+static int prompt_value(void) {
+    int value;
+
+    cout << " ... Please input the value[1 ~ 65536] : ";
+    cin  >> value;
+    cout << " ... You just input " << value << endl;
+
+    return value;
+}
+
+template <typename _Key, typename _Value>
 void test_share_hashmap(void)
 {
     char name[] = "test01";
-    ShareHashMap<_Key> shm(name);
+    ShareHashMap<_Key, _Value> shm(name);
 
 	if (rte_eal_process_type() == RTE_PROC_PRIMARY){ 
         if (!shm.create())                           
@@ -101,26 +122,22 @@ void test_share_hashmap(void)
     while (1) {
         int input = getchar();
         int quit = false;
-        int key_value = 0;
+        int key = 0;
+        int value = 0;
 
         switch (input) {
             case 'a':
-                cout << " ... Please input the key [1 ~ 65536] : ";
-                cin  >> key_value;
-                cout << " ... You just input " << key_value << endl;
-                shm.insert(key_value);
+                key = prompt_key();
+                value = prompt_value();
+                shm.insert(key, value);
                 break;
             case 'd':
-                cout << " ... Please input the key [1 ~ 65536] : ";
-                cin  >> key_value;
-                cout << " ... You just input " << key_value << endl;
-                shm.erase(key_value);
+                key = prompt_key();
+                shm.erase(key);
                 break;
             case 'f':
-                cout << " ... Please input the key [1 ~ 65536] : ";
-                cin  >> key_value;
-                cout << " ... You just input " << key_value << endl;
-                shm.find(key_value);
+                key = prompt_key();
+                shm.find(key);
                 break;
             case 's':
                 shm.print();

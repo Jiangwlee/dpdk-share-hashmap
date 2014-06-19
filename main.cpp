@@ -46,7 +46,7 @@ MAIN(int argc, char **argv)
 		rte_panic("Cannot init EAL\n");
 
     //test_share_hashmap<int>();
-    test_share_hashmap< struct_key, jhasher<struct_key> >();
+    test_share_hashmap< int, int >();
 
 	return 0;
 }
