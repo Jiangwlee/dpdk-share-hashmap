@@ -24,6 +24,8 @@
 #ifndef __TEST_H__
 #define __TEST_H__
 
+#include "modifier.h"
+
 #if 0
 template <typename _Key, typename _Value, typename _Hashfunc>
 void test_share_hashmap(void)
@@ -107,7 +109,8 @@ template <typename _Key, typename _Value>
 void test_share_hashmap(void)
 {
     char name[] = "test01";
-    ShareHashMap<_Key, _Value> shm(name);
+    typedef ShareHashMap<_Key, _Value> hashmap;
+    hashmap shm(name);
 
 	if (rte_eal_process_type() == RTE_PROC_PRIMARY){ 
         if (!shm.create())                           
@@ -125,6 +128,7 @@ void test_share_hashmap(void)
             int quit = false;
             int key = 0;
             int value = 0;
+            int index = 0;
     
             switch (input) {
                 case 'a':
@@ -138,13 +142,19 @@ void test_share_hashmap(void)
                     break;
                 case 'f':
                     key = prompt_key();
-                    if (shm.find(key) >= 0)
-                        cout << shm[key] << endl;
+                    index = shm.find(key);
+                    if (index >= 0) {
+                        typename hashmap::key_value_pair_type *key_value = NULL;
+                        shm.get_entry_with_index(key_value, index);
+                        if (key_value)
+                            cout << "Key : " << key_value->k << " Value : " << key_value->v << endl;
+                    }
                     break;
                 case 'm':
                     key = prompt_key();
                     value = prompt_value();
-                    shm[key] = value;
+                    add<_Value> add_op;
+                    shm.update_value(key, value, add_op);
                     break;
                 case 's':
                     shm.print();

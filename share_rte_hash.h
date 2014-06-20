@@ -19,7 +19,9 @@
 #ifndef _SHARE_RTE_HASH_H_
 #define _ShARE_RTE_HASH_H_
 
+#include <iostream>
 #include <rte_hash.h>
+#include <rte_rwlock.h>
 #include <rte_memcpy.h>         /* for definition of CACHE_LINE_SIZE */
 
 /* Macro to enable/disable run-time checking of function parameters */
@@ -59,21 +61,26 @@ class ShareRteHash {
         	uint8_t *key_bucket;
         	uint32_t bucket_index, i;
         	int32_t pos;
+            int32_t ret = -ENOSPC;
         
         	/* Get the hash signature and bucket index */
         	sig |= h->sig_msb;
         	bucket_index = sig & h->bucket_bitmask;
         	sig_bucket = get_sig_tbl_bucket(h, bucket_index);
         	key_bucket = get_key_tbl_bucket(h, bucket_index);
+
+            /* Do lock */
+            rte_rwlock_t * bucket_lock = get_bucket_lock(h, bucket_index);
+            rte_rwlock_write_lock(bucket_lock);
         
         	/* Check if key is already present in the hash */
         	for (i = 0; i < h->bucket_entries; i++) {
-        		if (sig == sig_bucket[i]) {// &&
-        		    //likely(memcmp(key, get_key_from_bucket(h, key_bucket, i),
-        		    //		  h->key_len) == 0)) {
+        		if (sig == sig_bucket[i]) {
                     _KeyValue * tmp = static_cast<_KeyValue*>(get_key_from_bucket(h, key_bucket, i));
-                    if (tmp && (key_value->k == tmp->k))
-        			    return bucket_index * h->bucket_entries + i;
+                    if (tmp && (key_value->k == tmp->k)) {
+        			    ret = bucket_index * h->bucket_entries + i;
+                        goto exit;
+                    }
         		}
         	}
         
@@ -81,12 +88,16 @@ class ShareRteHash {
         	pos = find_first(k_NULL_SIGNATURE, sig_bucket, h->bucket_entries);
         
         	if (pos < 0)
-        		return -ENOSPC;
+                goto exit;
         
         	/* Add the new key to the bucket */
         	sig_bucket[pos] = sig;
         	rte_memcpy(get_key_from_bucket(h, key_bucket, pos), key_value, h->key_len);
-        	return bucket_index * h->bucket_entries + pos;
+        	ret = bucket_index * h->bucket_entries + pos;
+
+exit:
+            rte_rwlock_write_unlock(bucket_lock);
+            return ret;
         }
 
         template<typename _KeyValue>
@@ -97,27 +108,33 @@ class ShareRteHash {
         	hash_sig_t *sig_bucket;
         	uint8_t *key_bucket;
         	uint32_t bucket_index, i;
+            int32_t  ret = -ENOENT;
         
         	/* Get the hash signature and bucket index */
         	sig = sig | h->sig_msb;
         	bucket_index = sig & h->bucket_bitmask;
         	sig_bucket = get_sig_tbl_bucket(h, bucket_index);
         	key_bucket = get_key_tbl_bucket(h, bucket_index);
+
+            /* Do lock */
+            rte_rwlock_t * bucket_lock = get_bucket_lock(h, bucket_index);
+            rte_rwlock_write_lock(bucket_lock);
         
         	/* Check if key is already present in the hash */
         	for (i = 0; i < h->bucket_entries; i++) {
-        		if (sig == sig_bucket[i]) {// &&
-        		    //likely(memcmp(key, get_key_from_bucket(h, key_bucket, i),
-        		    //		  h->key_len) == 0)) {
+        		if (sig == sig_bucket[i]) {
                     _KeyValue *tmp = static_cast<_KeyValue*>(get_key_from_bucket(h, key_bucket, i));
                     if (tmp && (key_value->k == tmp->k)) {
         			    sig_bucket[i] = k_NULL_SIGNATURE;
-        			    return bucket_index * h->bucket_entries + i;
+        			    ret = bucket_index * h->bucket_entries + i;
+                        goto exit;
                     }
         		}
         	}
         
-        	return -ENOENT;
+exit:
+            rte_rwlock_write_unlock(bucket_lock);
+        	return ret;
         }
 
         template<typename _KeyValue>
@@ -128,36 +145,49 @@ class ShareRteHash {
         	hash_sig_t *sig_bucket;
         	uint8_t *key_bucket;
         	uint32_t bucket_index, i;
+            int32_t ret = -ENOENT;
         
         	/* Get the hash signature and bucket index */
         	sig |= h->sig_msb;
         	bucket_index = sig & h->bucket_bitmask;
         	sig_bucket = get_sig_tbl_bucket(h, bucket_index);
         	key_bucket = get_key_tbl_bucket(h, bucket_index);
+
+            /* Do lock */
+            rte_rwlock_t * bucket_lock = get_bucket_lock(h, bucket_index);
+            rte_rwlock_read_lock(bucket_lock);
         
         	/* Check if key is already present in the hash */
         	for (i = 0; i < h->bucket_entries; i++) {
-        		if (sig == sig_bucket[i]) {// &&
-        		    //likely(memcmp(key, get_key_from_bucket(h, key_bucket, i),
-        			//	  h->key_len) == 0)) {
+        		if (sig == sig_bucket[i]) {
                     _KeyValue *tmp = static_cast<_KeyValue*>(get_key_from_bucket(h, key_bucket, i));
                     if (tmp && (key_value->k == tmp->k)) {
-        			    return bucket_index * h->bucket_entries + i;
+                        ret = bucket_index * h->bucket_entries + i;
+                        goto exit;
                     }
         		}
         	}
-        
-        	return -ENOENT;
+exit:
+            rte_rwlock_read_unlock(bucket_lock);
+        	return ret;
         }
 
         template<typename _KeyValue>
-        void * find_or_insert_with_hash(const rte_hash *h, const _KeyValue *key_value, hash_sig_t sig)
+        void get_value_with_index(_KeyValue *& ret, const rte_hash *h, int32_t index)
+        {
+            ret = static_cast<_KeyValue*>(get_key_with_indexh, index());
+        }
+
+        template<typename _KeyValue, typename _Modifier>
+        bool update_value_with_hash(const rte_hash *h, const _KeyValue *key_value,
+                                    hash_sig_t sig, _Modifier update)
         {
         	RETURN_IF_TRUE(((h == NULL) || (key_value == NULL)), NULL);
         
         	hash_sig_t *sig_bucket;
         	uint8_t *key_bucket;
         	uint32_t bucket_index, i;
+            bool ret = false;
         
         	/* Get the hash signature and bucket index */
         	sig |= h->sig_msb;
@@ -165,26 +195,26 @@ class ShareRteHash {
         	sig_bucket = get_sig_tbl_bucket(h, bucket_index);
         	key_bucket = get_key_tbl_bucket(h, bucket_index);
         
+            /* Do lock */
+            rte_rwlock_t * bucket_lock = get_bucket_lock(h, bucket_index);
+            rte_rwlock_write_lock(bucket_lock);
+
         	/* Check if key is already present in the hash */
         	for (i = 0; i < h->bucket_entries; i++) {
         		if (sig == sig_bucket[i]) {
                     _KeyValue * tmp = static_cast<_KeyValue*>(get_key_from_bucket(h, key_bucket, i));
-                    if (tmp && (key_value->k == tmp->k))
-        			    return static_cast<void *>(&(tmp->v));
+                    if (tmp && (key_value->k == tmp->k)) {
+                        // Find this key
+                        update(tmp->v, key_value->v);
+                        ret = true;
+                        goto exit;
+                    }
         		}
         	}
         
-        	/* Check if any free slot within the bucket to add the new key */
-        	int32_t pos = find_first(k_NULL_SIGNATURE, sig_bucket, h->bucket_entries);
-        
-        	if (pos < 0)
-        		return NULL;
-        
-        	/* Add the new key to the bucket */
-        	sig_bucket[pos] = sig;
-            _KeyValue * tmp = static_cast<_KeyValue *>(get_key_from_bucket(h, key_bucket, pos));
-        	rte_memcpy(static_cast<void *>(tmp), key_value, h->key_len);
-        	return static_cast<void *>(&(tmp->v));
+exit:
+            rte_rwlock_write_unlock(bucket_lock);
+            return ret;
         }
 
     public:
@@ -198,8 +228,6 @@ class ShareRteHash {
         rte_hash * create_hash_table(const rte_hash_parameters *params);
         rte_hash * attach_hash_table(const char * name);
         void       free_hash_table(rte_hash *& hash_tbl); 
-        int32_t    lookup_with_hash(const rte_hash *h, const void *key, hash_sig_t sig);
-
 
     private:
         ShareRteHash(void) {}
@@ -226,6 +254,12 @@ class ShareRteHash {
         {
         	return (void *) &bkt[pos * h->key_tbl_key_size];
         }
+
+        inline void *
+        get_key_with_index(const rte_hash *h, uint32_t index)
+        {
+            return (void *) &(h->key_tbl[index * h->key_tbl_key_size]);
+        }
         
         /* Does integer division with rounding-up of result. */
         inline uint32_t
@@ -251,6 +285,16 @@ class ShareRteHash {
         			return i;
         	}
         	return -1;
+        }
+
+        /* Get rte_rwlock for a bucket */
+        inline rte_rwlock_t *
+        get_bucket_lock(const rte_hash *h, uint32_t bucket_index)
+        {
+            uint32_t sig_tbl_size = align_size(h->num_buckets * h->sig_tbl_bucket_size,
+                                               CACHE_LINE_SIZE);
+            rte_rwlock_t * bucket_lock_array = static_cast<rte_rwlock_t *>((void *)(h->sig_tbl + sig_tbl_size));
+            return (bucket_lock_array + bucket_index);
         }
 };
 

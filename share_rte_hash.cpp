@@ -95,6 +95,22 @@ ShareRteHash::attach_hash_table(const char *name)
  *     . The memory zone of rte_hash, signature table and key_value table are
  *       independent now. So that it could support resize of hash table.
  *     . The maximum bulket entires is extended to 1024 now
+ *
+ * @ The overview of this rte_hash looks like fowlloing graphic:
+ *                       +-----------+ 
+ *                       |  rte_hash |
+ *                       |-----------|        +-------------------+
+ *                       |  sig_tbl  |------> |  signature table  | 
+ *                       |-----------|        |-------------------|
+ *                       |  key_tbl  |        | bucket locks array|
+ *                       +-----------+        +-------------------+
+ *                             |
+ *                             |              <* The bucket locks array just follows sig_tbl *>
+ *                             v
+ *                             +---------------+
+ *                             |   key table   |
+ *                             +---------------+
+ *
  */
 rte_hash *
 ShareRteHash::create_hash_table(const rte_hash_parameters *params)
@@ -103,7 +119,8 @@ ShareRteHash::create_hash_table(const rte_hash_parameters *params)
     uint8_t *p_sig_tbl = NULL;
     uint8_t *p_key_value_tbl = NULL;
 	uint32_t num_buckets, sig_bucket_size, key_value_size,
-		hash_tbl_size, sig_tbl_size, key_value_tbl_size;
+		hash_tbl_size, sig_tbl_size, key_value_tbl_size,
+        bucket_locks_array_size;
 	char hash_name[RTE_HASH_NAMESIZE];
 	char sig_name[RTE_HASH_NAMESIZE];
 	char key_value_name[RTE_HASH_NAMESIZE];
@@ -139,12 +156,13 @@ ShareRteHash::create_hash_table(const rte_hash_parameters *params)
 	sig_bucket_size = align_size(params->bucket_entries *
 				     sizeof(hash_sig_t), k_SIG_BUCKET_ALIGNMENT);
 	key_value_size =  align_size(params->key_len, k_KEY_ALIGNMENT);
-
 	hash_tbl_size = align_size(sizeof(struct rte_hash), CACHE_LINE_SIZE);
 	sig_tbl_size = align_size(num_buckets * sig_bucket_size,
 				  CACHE_LINE_SIZE);
 	key_value_tbl_size = align_size(num_buckets * key_value_size *
 				  params->bucket_entries, CACHE_LINE_SIZE);
+    bucket_locks_array_size = align_size(num_buckets * sizeof(rte_rwlock_t),
+                                         CACHE_LINE_SIZE);
 	
 	/* Total memory required for hash context */
 	// mem_size = hash_tbl_size + sig_tbl_size + key_value_tbl_size;
@@ -166,7 +184,8 @@ ShareRteHash::create_hash_table(const rte_hash_parameters *params)
 		goto exit;
 	}
 
-    p_sig_tbl = (uint8_t *)rte_zmalloc_socket(sig_name, sig_tbl_size,
+    /* put the bucket locks array just after sig_tbl */
+    p_sig_tbl = (uint8_t *)rte_zmalloc_socket(sig_name, sig_tbl_size + bucket_locks_array_size,
             CACHE_LINE_SIZE, params->socket_id);
 
 	if (p_sig_tbl == NULL) {

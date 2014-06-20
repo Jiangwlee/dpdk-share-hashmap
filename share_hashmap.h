@@ -108,6 +108,9 @@ class ShareHashMap {
                 return false;
         }
 
+#if 0
+        // operator [] should not be override for share hashmap. Because use it for left value
+        // can't prevent multi-process writing
         //
         // <case 1> If the key has already in the hash table, return a reference to the value 
         // <case 2> If the key is not in the hash table, insert an element with the key and then
@@ -124,6 +127,13 @@ class ShareHashMap {
 
             return *static_cast<value_type*>(value_ptr);
         }
+#endif
+
+
+        // get value by index
+        void get_entry_with_index(key_value_pair_type *& ret, uint32_t index) {
+            return ShareRteHash::instance().get_value_with_index(ret, m_rte_hash, index);
+        }
 
         // insert a <key, value> pair to hash table
         int32_t insert(const key_type& __key, const value_type& __value) {
@@ -138,6 +148,14 @@ class ShareHashMap {
 #endif
         
             return position;
+        }
+
+        // update a <key, value> pair in hash table
+        template<typename _Modifier>
+        bool update_value(const key_type& __key, const value_type& __new_value, const _Modifier& update) {
+            key_value_pair_type key_value_pair = {__key, __new_value};
+            hash_sig_t signature = m_hash_func(__key);
+            return ShareRteHash::instance().update_value_with_hash(m_rte_hash, &key_value_pair, signature, update);
         }
 
         // get the index of a key in hash table
