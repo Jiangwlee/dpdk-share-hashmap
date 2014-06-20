@@ -119,46 +119,50 @@ void test_share_hashmap(void)
 
     cout << "Please input your choice : a[dd], d[elete], f[ind], m[odify], s[how], q[uit]" << endl;
 
-    while (1) {
-        int input = getchar();
-        int quit = false;
-        int key = 0;
-        int value = 0;
-
-        switch (input) {
-            case 'a':
-                key = prompt_key();
-                value = prompt_value();
-                shm.insert(key, value);
+    try {
+        while (1) {
+            int input = getchar();
+            int quit = false;
+            int key = 0;
+            int value = 0;
+    
+            switch (input) {
+                case 'a':
+                    key = prompt_key();
+                    value = prompt_value();
+                    shm.insert(key, value);
+                    break;
+                case 'd':
+                    key = prompt_key();
+                    shm.erase(key);
+                    break;
+                case 'f':
+                    key = prompt_key();
+                    if (shm.find(key) >= 0)
+                        cout << shm[key] << endl;
+                    break;
+                case 'm':
+                    key = prompt_key();
+                    value = prompt_value();
+                    shm[key] = value;
+                    break;
+                case 's':
+                    shm.print();
+                    break;
+                case 'q':
+                    quit = true;
+                    break;
+                default:
+                    continue;
+            }
+    
+            cout << "Please input your choice : a[dd], d[elete], f[ind], m[odify], s[how], q[uit]" << endl;
+    
+            if (quit)
                 break;
-            case 'd':
-                key = prompt_key();
-                shm.erase(key);
-                break;
-            case 'f':
-                key = prompt_key();
-                if (shm.find(key) >= 0)
-                    cout << shm[key] << endl;
-                break;
-            case 'm':
-                key = prompt_key();
-                value = prompt_value();
-                shm[key] = value;
-                break;
-            case 's':
-                shm.print();
-                break;
-            case 'q':
-                quit = true;
-                break;
-            default:
-                continue;
         }
-
-        cout << "Please input your choice : a[dd], d[elete], f[ind], m[odify], s[how], q[uit]" << endl;
-
-        if (quit)
-            break;
+    } catch (Exception &ex) {
+        cout << ex << endl;
     }
 }
 

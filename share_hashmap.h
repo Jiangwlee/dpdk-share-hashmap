@@ -46,6 +46,7 @@
 
 #include "hash_func.h"
 #include "share_rte_hash.h"
+#include "exception.h"
 
 using namespace std;
 
@@ -119,7 +120,7 @@ class ShareHashMap {
             void * value_ptr = ShareRteHash::instance().find_or_insert_with_hash(m_rte_hash, &key_value_pair, signature);
 
             if (value_ptr == NULL)
-                throw;
+                throw Exception("ShareHashMap::[]", "Insert key to hash map fail!");
 
             return *static_cast<value_type*>(value_ptr);
         }
