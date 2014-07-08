@@ -153,20 +153,17 @@ ShareRteHash::create_hash_table(const rte_hash_parameters *params)
 
 	/* Calculate hash dimensions */
 	num_buckets = params->entries / params->bucket_entries;
-	sig_bucket_size = align_size(params->bucket_entries *
-				     sizeof(hash_sig_t), k_SIG_BUCKET_ALIGNMENT);
-	key_value_size =  align_size(params->key_len, k_KEY_ALIGNMENT);
-	hash_tbl_size = align_size(sizeof(struct rte_hash), CACHE_LINE_SIZE);
-	sig_tbl_size = align_size(num_buckets * sig_bucket_size,
-				  CACHE_LINE_SIZE);
-	key_value_tbl_size = align_size(num_buckets * key_value_size *
-				  params->bucket_entries, CACHE_LINE_SIZE);
-    bucket_locks_array_size = align_size(num_buckets * sizeof(rte_rwlock_t),
-                                         CACHE_LINE_SIZE);
-	
-	/* Total memory required for hash context */
-	// mem_size = hash_tbl_size + sig_tbl_size + key_value_tbl_size;
+	hash_tbl_size   = align_size(sizeof(struct rte_hash), CACHE_LINE_SIZE);
 
+	sig_bucket_size = align_size(params->bucket_entries * sizeof(hash_sig_t), k_SIG_BUCKET_ALIGNMENT);
+	sig_tbl_size    = align_size(num_buckets * sig_bucket_size, CACHE_LINE_SIZE);
+
+	key_value_size  = align_size(params->key_len, k_KEY_ALIGNMENT);
+	key_value_tbl_size = align_size(num_buckets * key_value_size * params->bucket_entries, CACHE_LINE_SIZE);
+
+    bucket_locks_array_size = align_size(num_buckets * sizeof(rte_rwlock_t), CACHE_LINE_SIZE);
+	
+    /* Do Lock */
 	rte_rwlock_write_lock(RTE_EAL_TAILQ_RWLOCK);
 
 	/* guarantee there's no existing */
@@ -177,6 +174,7 @@ ShareRteHash::create_hash_table(const rte_hash_parameters *params)
 	if (h != NULL)
 		goto exit;
 
+    /* Allocate memory for rte_hash */
 	h = (struct rte_hash *)rte_zmalloc_socket(hash_name, hash_tbl_size,
 					   CACHE_LINE_SIZE, params->socket_id);
 	if (h == NULL) {
@@ -184,21 +182,25 @@ ShareRteHash::create_hash_table(const rte_hash_parameters *params)
 		goto exit;
 	}
 
-    /* put the bucket locks array just after sig_tbl */
+    /*
+     * Allocate memory for sig_tbl and bucket locks
+     * put the bucket locks array just after sig_tbl
+     */
     p_sig_tbl = (uint8_t *)rte_zmalloc_socket(sig_name, sig_tbl_size + bucket_locks_array_size,
             CACHE_LINE_SIZE, params->socket_id);
 
 	if (p_sig_tbl == NULL) {
 		RTE_LOG(ERR, HASH, "memory allocation failed - sig table\n");
-		goto error;
+		goto malloc_fail_1;
 	}
 
+    /* Allocate memory for key_value table */
     p_key_value_tbl = (uint8_t *)rte_zmalloc_socket(key_value_name, key_value_tbl_size,
             CACHE_LINE_SIZE, params->socket_id);
 
 	if (p_key_value_tbl == NULL) {
 		RTE_LOG(ERR, HASH, "memory allocation failed - key value table\n");
-		goto error;
+		goto malloc_fail_2;
 	}
 
 	/* Setup hash context */
@@ -220,17 +222,16 @@ ShareRteHash::create_hash_table(const rte_hash_parameters *params)
 	TAILQ_INSERT_TAIL(hash_list, h, next);
     goto exit;
 
-error:
+malloc_fail_2:
+    if (p_sig_tbl) {
+        rte_free(p_sig_tbl);
+        p_sig_tbl = NULL;
+    }
+malloc_fail_1:
     if (h) {
         rte_free(h);
         h = NULL;
     }
-
-    if (p_sig_tbl) {
-        rte_free(p_sig_tbl);
-        h = NULL;
-    }
-
 exit:
 	rte_rwlock_write_unlock(RTE_EAL_TAILQ_RWLOCK);
 
@@ -254,74 +255,4 @@ ShareRteHash::free_hash_table(rte_hash *& h)
 	rte_free(h);
     h = NULL;
 }
-
-#if 0
-int32_t
-ShareRteHash::add_key_with_hash(const rte_hash *h, 
-				const void *key, hash_sig_t sig)
-{
-	RETURN_IF_TRUE(((h == NULL) || (key == NULL)), -EINVAL);
-
-	hash_sig_t *sig_bucket;
-	uint8_t *key_bucket;
-	uint32_t bucket_index, i;
-	int32_t pos;
-
-	/* Get the hash signature and bucket index */
-	sig |= h->sig_msb;
-	bucket_index = sig & h->bucket_bitmask;
-	sig_bucket = get_sig_tbl_bucket(h, bucket_index);
-	key_bucket = get_key_tbl_bucket(h, bucket_index);
-
-	/* Check if key is already present in the hash */
-	for (i = 0; i < h->bucket_entries; i++) {
-		if ((sig == sig_bucket[i]) &&
-		    likely(memcmp(key, get_key_from_bucket(h, key_bucket, i),
-				  h->key_len) == 0)) {
-			return bucket_index * h->bucket_entries + i;
-		}
-	}
-
-	/* Check if any free slot within the bucket to add the new key */
-	pos = find_first(k_NULL_SIGNATURE, sig_bucket, h->bucket_entries);
-
-	if (unlikely(pos < 0))
-		return -ENOSPC;
-
-	/* Add the new key to the bucket */
-	sig_bucket[pos] = sig;
-	rte_memcpy(get_key_from_bucket(h, key_bucket, pos), key, h->key_len);
-	return bucket_index * h->bucket_entries + pos;
-}
-
-
-int32_t
-ShareRteHash::del_key_with_hash(const rte_hash *h, 
-				const void *key, hash_sig_t sig)
-{
-	RETURN_IF_TRUE(((h == NULL) || (key == NULL)), -EINVAL);
-
-	hash_sig_t *sig_bucket;
-	uint8_t *key_bucket;
-	uint32_t bucket_index, i;
-
-	/* Get the hash signature and bucket index */
-	sig = sig | h->sig_msb;
-	bucket_index = sig & h->bucket_bitmask;
-	sig_bucket = get_sig_tbl_bucket(h, bucket_index);
-	key_bucket = get_key_tbl_bucket(h, bucket_index);
-
-	/* Check if key is already present in the hash */
-	for (i = 0; i < h->bucket_entries; i++) {
-		if ((sig == sig_bucket[i]) &&
-		    likely(memcmp(key, get_key_from_bucket(h, key_bucket, i),
-				  h->key_len) == 0)) {
-			sig_bucket[i] = k_NULL_SIGNATURE;
-			return bucket_index * h->bucket_entries + i;
-		}
-	}
-
-	return -ENOENT;
-}
-#endif
 

@@ -175,7 +175,7 @@ exit:
         template<typename _KeyValue>
         void get_value_with_index(_KeyValue *& ret, const rte_hash *h, int32_t index)
         {
-            ret = static_cast<_KeyValue*>(get_key_with_indexh, index());
+            ret = static_cast<_KeyValue*>(get_key_with_index(h, index));
         }
 
         template<typename _KeyValue, typename _Modifier>

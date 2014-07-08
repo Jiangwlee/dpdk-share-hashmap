@@ -108,31 +108,9 @@ class ShareHashMap {
                 return false;
         }
 
-#if 0
-        // operator [] should not be override for share hashmap. Because use it for left value
-        // can't prevent multi-process writing
-        //
-        // <case 1> If the key has already in the hash table, return a reference to the value 
-        // <case 2> If the key is not in the hash table, insert an element with the key and then
-        //          return a reference to the value
-        // 
-        value_type & operator[] (const key_type& __key) {
-            key_value_pair_type key_value_pair;
-            key_value_pair.k = __key;
-            hash_sig_t signature = m_hash_func(__key);
-            void * value_ptr = ShareRteHash::instance().find_or_insert_with_hash(m_rte_hash, &key_value_pair, signature);
-
-            if (value_ptr == NULL)
-                throw Exception("ShareHashMap::[]", "Insert key to hash map fail!");
-
-            return *static_cast<value_type*>(value_ptr);
-        }
-#endif
-
-
         // get value by index
         void get_entry_with_index(key_value_pair_type *& ret, uint32_t index) {
-            return ShareRteHash::instance().get_value_with_index(ret, m_rte_hash, index);
+            ShareRteHash::instance().get_value_with_index(ret, m_rte_hash, index);
         }
 
         // insert a <key, value> pair to hash table
