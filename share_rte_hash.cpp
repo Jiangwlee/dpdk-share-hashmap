@@ -192,7 +192,12 @@ ShareRteHash::create_hash_table(const rte_hash_parameters *params)
 	if (p_sig_tbl == NULL) {
 		RTE_LOG(ERR, HASH, "memory allocation failed - sig table\n");
 		goto malloc_fail_1;
-	}
+	} else {
+        /* Initialize bucket locks */
+        rte_rwlock_t * bucket_lock_array = static_cast<rte_rwlock_t *>((void *)(p_sig_tbl + sig_tbl_size)); 
+        for (uint32_t i = 0; i < num_buckets; ++i)
+            rte_rwlock_init(&bucket_lock_array[i]);
+    }
 
     /* Allocate memory for key_value table */
     p_key_value_tbl = (uint8_t *)rte_zmalloc_socket(key_value_name, key_value_tbl_size,
